@@ -13,7 +13,7 @@ from PyPDF2 import PdfReader
 # === CONFIG ===
 TOKEN = os.getenv('RENDER_BOT_TOKEN')
 DEEPSEEK_KEY = os.getenv('DEEPSEEK_API_KEY')
-YOUR_CHAT_ID = 123456789  # ← CHANGE THIS TO YOUR REAL TELEGRAM ID
+YOUR_CHAT_ID = 5554592254  # ← CHANGE TO YOUR REAL TELEGRAM ID
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,7 +27,7 @@ if os.path.exists(CACHE_FILE):
 def save_cache():
     open(CACHE_FILE, "w").write("\n".join(PROCESSED))
 
-# Pages to crawl for latest data
+# Pages to crawl
 PAGES = [
     "https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/deaths/datasets/weeklyprovisionalfiguresondeathsregisteredinenglandandwales",
     "https://data.cdc.gov/NCHS/Provisional-COVID-19-Death-Counts-by-Week-Ending-D/r8kw-7aab",
@@ -36,7 +36,7 @@ PAGES = [
     "https://www.ecdc.europa.eu/en/publications-data/weekly-respiratory-illnesses-surveillance-summary-europe",
 ]
 
-# Find first CSV/XLSX/PDF link on a page
+# Find first CSV/XLSX/PDF link on page
 def get_latest_file(page_url):
     try:
         r = requests.get(page_url, timeout=20)
@@ -74,7 +74,7 @@ async def make_article(text, url):
             {"role": "system", "content": "You are PureFact Writer. Use ONLY the data. Cite every number with source."},
             {"role": "user", "content": f"Source: {url}\nData:\n{text[:14000]}"}
         ],
-039        "temperature": 0.1,
+        "temperature": 0.1,
         "max_tokens": 1800
     }
     try:
@@ -89,7 +89,7 @@ async def make_article(text, url):
     except Exception as e:
         return f"API error: {e}"
 
-# Main scan function
+# Main scan
 async def run_scan(context, chat_id):
     count = 0
     for page in PAGES:
@@ -125,7 +125,7 @@ async def manual_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Starting scan…")
     await run_scan(context, update.effective_chat.id)
 
-# Render port fix – keeps service alive
+# Render port fix
 if os.getenv('RENDER'):
     from flask import Flask
     from waitress import serve
