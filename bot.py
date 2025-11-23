@@ -31,13 +31,25 @@ def save_cache():
     open(CACHE_FILE, "w").write("\n".join(PROCESSED))
 
 # Pages to crawl
-PAGES = [
-    "https://www.ons.gov.uk/peoplepopulationandcommunity/birthsdeathsandmarriages/deaths/datasets/weeklyprovisionalfiguresondeathsregisteredinenglandandwales",
-    "https://data.cdc.gov/NCHS/Provisional-COVID-19-Death-Counts-by-Week-Ending-D/r8kw-7aab",
-    "https://www.who.int/data/collections/excess-mortality",
-    "https://vaers.hhs.gov/data/datasets.html",
-    "https://www.ecdc.europa.eu/en/publications-data/weekly-respiratory-illnesses-surveillance-summary-europe",
-]
+# === ONLY USE sources.txt — YOUR WAY ===
+# Bot will read sources.txt from your repo every scan
+# One direct URL per line (CSV, XLSX, PDF — anything pandas/PyPDF2 can read)
+# Empty lines and lines starting with # are ignored
+
+PAGES = []
+SOURCES_FILE = "sources.txt"
+
+if os.path.exists(SOURCES_FILE):
+    with open(SOURCES_FILE) as f:
+        PAGES = [
+            line.strip() 
+            for line in f 
+            if line.strip() and not line.startswith("#")
+        ]
+    logger.info(f"Loaded {len(PAGES)} sources from sources.txt")
+else:
+    logger.warning("sources.txt not found — create it in your repo root!")
+    PAGES = []  # No sources → scan will say "0 new articles"
 
 def get_latest_file(page_url):
     try:
