@@ -36,20 +36,39 @@ def save_cache():
 # One direct URL per line (CSV, XLSX, PDF — anything pandas/PyPDF2 can read)
 # Empty lines and lines starting with # are ignored
 
+# === DEBUG: Show exactly what sources.txt contains ===
 PAGES = []
 SOURCES_FILE = "sources.txt"
 
 if os.path.exists(SOURCES_FILE):
-    with open(SOURCES_FILE) as f:
+    try:
+        with open(SOURCES_FILE) as f:
+            raw_lines = f.readlines()
+        
+        logger.info(f"sources.txt found! Raw lines ({len(raw_lines)} total):")
+        for i, line in enumerate(raw_lines, 1):
+            logger.info(f"  Line {i}: {line.strip() or '<empty>'}")
+        
         PAGES = [
-            line.strip() 
-            for line in f 
+            line.strip()
+            for line in raw_lines
             if line.strip() and not line.startswith("#")
         ]
-    logger.info(f"Loaded {len(PAGES)} sources from sources.txt")
+        
+        logger.info(f"After filtering → {len(PAGES)} valid URLs loaded:")
+        for url in PAGES:
+            logger.info(f"  → {url}")
+            
+    except Exception as e:
+        logger.error(f"Failed to read sources.txt: {e}")
+        PAGES = []
 else:
-    logger.warning("sources.txt not found — create it in your repo root!")
-    PAGES = []  # No sources → scan will say "0 new articles"
+    logger.warning("sources.txt NOT FOUND in repo root! Bot has zero sources → 0 articles forever.")
+    PAGES = []
+
+# Final safety check
+if not PAGES:
+    logger.warning("PAGES list is EMPTY → scan will always return 0 articles")
 
 def get_latest_file(page_url):
     try:
