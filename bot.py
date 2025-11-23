@@ -102,6 +102,7 @@ async def run_scan(context, chat_id):
     for page in PAGES:
         file_url = get_latest_file(page)
         if not file_url: continue
+        
         try:
             data = requests.get(file_url, timeout=30).content
             file_hash = hashlib.sha256(data).hexdigest()
@@ -109,14 +110,29 @@ async def run_scan(context, chat_id):
 
             text = extract_text(data, file_url.split("/")[-1])
             article = await make_article(text, file_url)
+            
+            # === GENERATE AI IMAGE ===
+            image_url = await generate_data_image(file_url, text[:2000])
+            
+            # Send article WITH image
             full_msg = f"PureFact Article – {datetime.now():%Y-%m-%d}\nSource: {file_url}\n\n{article}"
-
+            
+            # Send image first, then article text
+            if image_url:
+                await context.bot.send_photo(
+                    chat_id=chat_id, 
+                    photo=image_url,
+                    caption="PureFact: Data Visualization"
+                )
+            
+            # Send article text
             for part in [full_msg[i:i+4000] for i in range(0, len(full_msg), 4000)]:
                 await context.bot.send_message(chat_id, part, disable_web_page_preview=True)
 
             PROCESSED.add(file_hash)
             save_cache()
             count += 1
+            
         except Exception as e:
             logger.error(f"Error {file_url}: {e}")
 
