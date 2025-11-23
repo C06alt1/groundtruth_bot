@@ -5,4 +5,3 @@ pandas
 openpyxl
 PyPDF2
 flask
-waitress
