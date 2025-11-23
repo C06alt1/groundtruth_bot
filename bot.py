@@ -67,7 +67,7 @@ async def make_article(text, url):
     if not GROQ_KEY:
         return "GROQ_API_KEY missing — get free key at https://console.groq.com/keys"
     payload = {
-        "model": "llama-3.1-70b-versatile",
+        "model": "llama-3.3-70b-versatile",
         "messages": [
             {"role": "system", "content": "You are PureFact Writer. Use ONLY the data. Cite every number. Zero opinion."},
             {"role": "user", "content": f"Source: {url}\nData:\n{text[:14000]}"}
