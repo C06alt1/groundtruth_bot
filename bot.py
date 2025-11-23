@@ -3,6 +3,9 @@ import os
 import requests
 import hashlib
 from datetime import datetime
+import threading
+import time
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from bs4 import BeautifulSoup
@@ -12,13 +15,13 @@ from PyPDF2 import PdfReader
 
 # === CONFIG ===
 TOKEN = os.getenv('RENDER_BOT_TOKEN')
-DEEPSEEK_KEY = os.getenv('DEEPSEEK_API_KEY')
+GROQ_KEY = os.getenv('GROQ_API_KEY')  # Free unlimited: https://console.groq.com/keys
 YOUR_CHAT_ID = 5554592254  # ← CHANGE TO YOUR REAL TELEGRAM ID
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Cache: remember processed files
+# Cache processed files
 CACHE_FILE = "/tmp/processed.txt"
 PROCESSED = set()
 if os.path.exists(CACHE_FILE):
@@ -36,7 +39,6 @@ PAGES = [
     "https://www.ecdc.europa.eu/en/publications-data/weekly-respiratory-illnesses-surveillance-summary-europe",
 ]
 
-# Find first CSV/XLSX/PDF link on page
 def get_latest_file(page_url):
     try:
         r = requests.get(page_url, timeout=20)
@@ -45,11 +47,9 @@ def get_latest_file(page_url):
             href = a['href'].lower()
             if any(ext in href for ext in ['.csv', '.xlsx', '.xls', '.pdf']):
                 return requests.compat.urljoin(page_url, a['href'])
-    except:
-        pass
+    except: pass
     return None
 
-# Extract text from file
 def extract_text(data, name):
     name = name.lower()
     try:
@@ -60,20 +60,17 @@ def extract_text(data, name):
         if name.endswith('.pdf'):
             reader = PdfReader(BytesIO(data))
             return "\n".join(p.extract_text()[:2000] for p in reader.pages[:10])
-    except:
-        pass
+    except: pass
     return "Could not read file"
 
-# Generate article with DeepSeek
 async def make_article(text, url):
-    key = os.getenv('GROQ_API_KEY')
-    if not key:
-        return "GROQ_API_KEY missing"
+    if not GROQ_KEY:
+        return "GROQ_API_KEY missing — get free key at https://console.groq.com/keys"
     payload = {
         "model": "llama-3.1-70b-versatile",
         "messages": [
-            {"role": "system", "content": "You are PureFact Writer. Use ONLY the data. Cite every number with source. Zero opinion."},
-            {"role": "user", "content": f"Source: {url}\nData chunk:\n{text[:14000]}"}
+            {"role": "system", "content": "You are PureFact Writer. Use ONLY the data. Cite every number. Zero opinion."},
+            {"role": "user", "content": f"Source: {url}\nData:\n{text[:14000]}"}
         ],
         "temperature": 0.1,
         "max_tokens": 1800
@@ -81,25 +78,22 @@ async def make_article(text, url):
     try:
         r = requests.post("https://api.groq.com/openai/v1/chat/completions",
                           json=payload,
-                          headers={"Authorization": f"Bearer {key}"},
+                          headers={"Authorization": f"Bearer {GROQ_KEY}"},
                           timeout=60)
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
     except Exception as e:
         return f"API error: {e}"
 
-# Main scan
 async def run_scan(context, chat_id):
     count = 0
     for page in PAGES:
         file_url = get_latest_file(page)
-        if not file_url:
-            continue
+        if not file_url: continue
         try:
             data = requests.get(file_url, timeout=30).content
             file_hash = hashlib.sha256(data).hexdigest()
-            if file_hash in PROCESSED:
-                continue
+            if file_hash in PROCESSED: continue
 
             text = extract_text(data, file_url.split("/")[-1])
             article = await make_article(text, file_url)
@@ -116,7 +110,6 @@ async def run_scan(context, chat_id):
 
     await context.bot.send_message(chat_id, f"Scan complete — {count} new article(s)")
 
-# Commands
 async def daily_scan(context):
     await run_scan(context, context.job.chat_id)
 
@@ -124,40 +117,43 @@ async def manual_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Starting scan…")
     await run_scan(context, update.effective_chat.id)
 
-# Render port fix
+# === RENDER FREE-TIER FIX: port 80 + Google ping every 30s ===
 if os.getenv('RENDER'):
     from flask import Flask
-    from waitress import serve
-    import threading
 
     app = Flask(__name__)
 
     @app.route("/")
-    def health_check():
-        return "bot alive", 200
+    def health():
+        return "PureFact bot alive and healthy", 200
 
-    threading.Thread(
-        target=serve,
-        args=(app,),
-        kwargs={"host": "0.0.0.0", "port": int(os.environ.get("PORT", 8000))},
-        daemon=True
-    ).start()
+    # Google ping every 30 seconds
+    def google_ping():
+        while True:
+            try:
+                requests.get("https://www.google.com", timeout=10)
+            except: pass
+            time.sleep(30)
 
-# Start bot
+    # Start Flask on port 80 + pinger
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=80), daemon=True).start()
+    threading.Thread(target=google_ping, daemon=True).start()
+# ===============================================================
+
 def main():
     if not TOKEN:
         logger.error("No TOKEN")
         return
 
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("scan", manual_scan))
-    app.job_queue.run_daily(
+    application = Application.builder().token(TOKEN).build()
+    application.add_handler(CommandHandler("scan", manual_scan))
+    application.job_queue.run_daily(
         daily_scan,
-        time=datetime.utcnow().replace(hour=8, minute=0, second=0, microsecond=0),
+        time=datetime.now().replace(hour=8, minute=0, second=0, microsecond=0),
         chat_id=YOUR_CHAT_ID
     )
     logger.info("PureFact bot started")
-    app.run_polling()
+    application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     main()
