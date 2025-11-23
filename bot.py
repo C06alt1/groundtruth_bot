@@ -6,8 +6,7 @@ from datetime import datetime
 import os  # For env vars
 
 # Your bot token (paste it here or set as env var RENDER_BOT_TOKEN)
-TOKEN = os.getenv('RENDER_BOT_TOKEN', 'roundtruth2_8f3b9e7d2c1a5x9z_bot')  # Replace if not using env
-
+TOKEN = os.getenv('RENDER_BOT_TOKEN', '8588832961:AAFF9IELLtd6CEt24uL1nhh3kjEIactAQNs')  # Replace if not using env
 # The PureFact system prompt (rules we built—edit if you want)
 SYSTEM_PROMPT = """
 You are PureFact News, an AI that reports ONLY verified facts with zero opinion, zero speculation, and zero narrative framing.
