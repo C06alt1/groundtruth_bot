@@ -1,99 +1,139 @@
 import logging
-import asyncio
+import os
+import requests
+import pandas as pd
+from io import BytesIO
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-import requests  # For fetching primary sources
-from datetime import datetime
-import os  # For env vars
+from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from datetime import datetime, timedelta
+import hashlib
+from PyPDF2 import PdfReader
 
-# Your bot token (from Render env var)
 TOKEN = os.getenv('RENDER_BOT_TOKEN')
+DEEPSEEK_KEY = os.getenv('DEEPSEEK_API_KEY')
+SOURCES_URL = "https://raw.githubusercontent.com/YOURNAME/purefact-bot/main/sources.txt"  # ← CHANGE YOURNAME
 
-# The PureFact system prompt (rules we built—edit if you want)
-SYSTEM_PROMPT = """
-You are PureFact News, an AI that reports ONLY verified facts with zero opinion, zero speculation, and zero narrative framing.
+# Replace YOURNAME above with your actual GitHub username
 
-STRICT RULES (never break them):
-- Speak ONLY in short, dated bullet points.
-- Every single claim must end with a direct source link in [brackets] or say [No primary source found].
-- Prefer primary sources: official documents, government data, scientific papers, raw video with visible date/location, court filings, FOIA releases, on-camera statements by involved parties.
-- When sources contradict, list BOTH sides clearly and link both.
-- Quote exact numbers, dates, and wording from the source; never paraphrase in a way that could change meaning.
-- If mainstream outlets and alternative outlets disagree, present both with links and never say which is "correct".
-- Never use the words "experts say", "studies show", "fact-checkers claim" without naming the exact expert/study/checker and linking it.
-- If asked who is "right", respond: "Here are the primary sources from each side: [links]"
-- Today's date is November 23, 2025.
-- End every response with a "Sources" section containing all links in full.
-
-Format example:
-• 2025-11-15: UK ONS released vaccine mortality data showing X all-cause deaths in vaccinated group vs Y in unvaccinated [link]
-• 2025-11-16: Pfizer spokesperson told Congress "Z" [video link + timestamp]
-• 2025-11-17: Independent researcher Dr John Smith posted raw data showing opposite trend [link]
-
-Begin every answer with: "PureFact News – [today's date] – Topic: [your question]"
-"""
-
-# List of primary sources (from our 30-feed list—add/remove as needed)
-PRIMARY_SOURCES = [
-    'https://data.cdc.gov',
-    'https://www.gov.uk/government/statistics',
-    'https://ourworldindata.org',
-    'https://clinicaltrials.gov',
-    'https://vaers.hhs.gov',
-    # Add more here
-]
-
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Welcome to PureFact News! Type /daily for a briefing or ask about any topic.')
+# Remember which files we already processed (simple in-memory + file on disk)
+PROCESSED_CACHE = set()
+CACHE_FILE = "/tmp/processed_cache.txt"
+if os.path.exists(CACHE_FILE):
+    with open(CACHE_FILE) as f:
+        PROCESSED_CACHE.update(f.read().splitlines())
 
-async def daily_briefing(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    today = datetime.now().strftime('%Y-%m-%d')
+def save_cache():
+    with open(CACHE_FILE, "w") as f:
+        f.write("\n".join(PROCESSED_CACHE))
+
+async def daily_scan(context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(chat_id=context.job.chat_id, text="Starting daily PureFact scan…")
+    count = await run_full_scan(context)
+    await context.bot.send_message(chat_id=context.job.chat_id, text=f"Scan complete — {count} new article(s) generated.")
+
+async def manual_scan(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Manual scan started…")
+    count = await run_full_scan(context, chat_id=update.effective_chat.id)
+    await update.message.reply_text(f"Done — {count} new article(s).")
+
+async def run_full_scan(context, chat_id=None):
+    sources = requests.get(SOURCES_URL).text.strip().splitlines()
+    sources = [s.strip() for s in sources if s.strip() and not s.startswith("#")]
+    new_count = 0
+
+    for url in sources:
+        try:
+            article = await process_url(url)
+            if article:
+                target = chat_id or context.job.chat_id
+                for chunk in [article[i:i+4000] for i in range(0, len(article), 4000)]:
+                    await context.bot.send_message(chat_id=target, text=chunk, disable_web_page_preview=True)
+                new_count += 1
+        except Exception as e:
+            logger.error(f"Error with {url}: {e}")
+
+    save_cache()
+    return new_count
+
+async def process_url(url: str):
+    headers = {'User-Agent': 'PureFactBot/1.0'}
+    r = requests.get(url, headers=headers, timeout=30)
+    r.raise_for_status()
+    content = r.content
+    file_hash = hashlib.sha256(content).hexdigest()
+    if file_hash in PROCESSED_CACHE:
+        return None  # already done
+
+    filename = url.split("/")[-1] or "datafile"
+    raw_text = extract_text(content, filename)
+
+    article = await generate_article(raw_text, url)
+    PROCESSED_CACHE.add(file_hash)
+    return f"PureFact Article – {datetime.now():%Y-%m-%d}\nTopic: {filename}\n\n{article}\n\nSource: {url}"
+
+def extract_text(data: bytes, name: str) -> str:
+    name = name.lower()
     try:
-        # Simple fetch example (expand with real scraping/API)
-        response = requests.get('https://ourworldindata.org/explorers/coronavirus-data-explorer', timeout=10)
-        # Placeholder—replace with actual logic (e.g., parse JSON from a source)
-        briefing = f"PureFact News Daily Briefing – {today}\n• Sample: Latest global data update [https://ourworldindata.org]\nSources: https://ourworldindata.org"
-        await update.message.reply_text(briefing)
-    except Exception as e:
-        logger.error(f"Error in daily briefing: {e}")
-        await update.message.reply_text("Briefing unavailable—try again later.")
+        if name.endswith(('.csv', '.tsv')):
+            return pd.read_csv(BytesIO(data)).head(60).to_string()
+        if name.endswith(('.xls', '.xlsx')):
+            xl = pd.ExcelFile(BytesIO(data))
+            return " | ".join(xl.sheet_names) + "\n" + pd.read_excel(BytesIO(data)).head(40).to_string()
+        if name.endswith('.pdf'):
+            reader = PdfReader(BytesIO(data))
+            return "\n".join(page.extract_text()[:3000] for page in reader.pages[:10])
+        if name.endswith('.json'):
+            return str(requests.get(url).json())[:15000]
+        return str(data[:15000])
+    except:
+        return str(data[:15000])
 
-async def facts_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = ' '.join(context.args) if context.args else update.message.text or 'general facts'
-    today = datetime.now().strftime('%Y-%m-%d')
-    # Simulate AI response with prompt (in real use, call an LLM API like xAI's here)
-    ai_response = f"PureFact News – {today} – Topic: {query}\n• Test fact: Bot is live and using primary sources [{PRIMARY_SOURCES[0]}]\nSources: {', '.join(PRIMARY_SOURCES)}"
-    await update.message.reply_text(ai_response)
+async def generate_article(raw: str, source_url: str) -> str:
+    if not DEEPSEEK_KEY:
+        return "DEEPSEEK_API_KEY missing"
+
+    payload = {
+        "model": "deepseek-chat",
+        "messages": [
+            {"role": "system", "content": "You are PureFact Article Writer. Use ONLY the raw data below. Every number/claim ends with [Source: row/sheet/link]. Zero opinion."},
+            {"role": "user", "content": f"Source URL: {source_url}\n\nRaw data (first chunk):\n{raw[:14000]}"}
+        ],
+        "temperature": 0.1,
+        "max_tokens": 1800
+    }
+    try:
+        r = requests.post("https://api.deepseek.com/v1/chat/completions", json=payload,
+                          headers={"Authorization": f"Bearer {DEEPSEEK_KEY}"}, timeout=90)
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"Generation failed: {e}"
+
+# === RENDER PORT FIX (still included) ===
+if os.getenv('RENDER'):
+    from waitress import serve
+    from flask import Flask
+    app = Flask(__name__)
+    @app.route('/'); def home(): return "Bot alive", 200
+    import threading
+    threading.Thread(target=serve, args=(app,), kwargs={"host": "0.0.0.0", "port": int(os.environ.get("PORT", 8000))}, daemon=True).start()
 
 def main():
-    if not TOKEN:
-        logger.error("RENDER_BOT_TOKEN env var not set!")
-        return
+    if not TOKEN: return logger.error("No token")
 
-    # Build app with v22+ syntax (fixes Updater init on 3.13)
-    application = (
-        Application.builder()
-        .token(TOKEN)
-        .build()
-    )
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", lambda u,c: u.message.reply_text("PureFact Daily Scanner ready\nUse /scan for manual run")))
+    app.add_handler(CommandHandler("scan", manual_scan))
 
-    # Add handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("daily", daily_briefing))
-    application.add_handler(CommandHandler("facts", facts_query))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, facts_query))
+    # Daily auto-scan at 08:00 UTC (adjust if you want)
+    job_queue = app.job_queue
+    job_queue.run_daily(daily_scan, time=datetime.utcnow().replace(hour=8, minute=0, second=0, microsecond=0), chat_id=YOUR_TELEGRAM_CHAT_ID)
 
-    # Run with explicit async context for stability
-    logger.info("Starting bot...")
-    application.run_polling(
-        allowed_updates=Update.ALL_TYPES,
-        drop_pending_updates=True,  # Clears old updates on start
-        timeout=10,
-        bootstrap_retries=-1  # Infinite retries on errors
-    )
+    logger.info("PureFact Daily Scanner started")
+    app.run_polling()
 
 if __name__ == '__main__':
     main()
