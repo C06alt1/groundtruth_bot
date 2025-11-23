@@ -1,4 +1,6 @@
-# 100 % direct downloadable files – guaranteed to work
+# My personal high-signal raw data sources
+https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/birthsdeathsandmarriages/deaths/datasets/weeklyprovisionalfiguresondeathsregisteredinenglandandwales/2025/weeklydeathsweek452025.xlsx
 https://data.cdc.gov/api/views/9bhg-hcku/rows.csv?accessType=DOWNLOAD
-https://www.ecdc.europa.eu/sites/default/files/documents/Weekly-COVID-19-country-overview.xlsx
 https://extranet.who.int/tme/generateCSV.asp?ds=excess_mortality_all
+https://vaers.hhs.gov/data/data-datasets/2024VAERSData.zip
+# Add as many as you want — one per line
