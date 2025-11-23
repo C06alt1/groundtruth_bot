@@ -1,7 +1,3 @@
-### Quick Fixed Version
-Here's the **corrected full `bot.py`** (copy-paste this over your current file and commit). I fixed the syntax, model, and minor nits—test with `/scan` after deploy.
-
-```python
 import logging
 import os
 import requests
