@@ -1,2 +1,7 @@
 python-telegram-bot==22.5
-requests==2.31.0
+requests
+pandas
+openpyxl
+PyPDF2
+flask
+waitress
