@@ -37,39 +37,46 @@ def save_cache():
 # Empty lines and lines starting with # are ignored
 
 # === DEBUG: Show exactly what sources.txt contains ===
+# === FINAL DEBUG + ARRAY CHECK + TELEGRAM WARNING ===
 PAGES = []
 SOURCES_FILE = "sources.txt"
+
+logger.info("=== SOURCES.TXT DEBUG START ===")
+logger.info(f"Current directory: {os.getcwd()}")
+logger.info(f"Files in repo: {os.listdir('.')}")
 
 if os.path.exists(SOURCES_FILE):
     try:
         with open(SOURCES_FILE) as f:
             raw_lines = f.readlines()
         
-        logger.info(f"sources.txt found! Raw lines ({len(raw_lines)} total):")
+        logger.info(f"sources.txt FOUND! {len(raw_lines)} lines total")
         for i, line in enumerate(raw_lines, 1):
-            logger.info(f"  Line {i}: {line.strip() or '<empty>'}")
+            stripped = line.strip()
+            logger.info(f"  Line {i}: '{stripped or '<EMPTY>'}'")
         
-        PAGES = [
-            line.strip()
-            for line in raw_lines
-            if line.strip() and not line.startswith("#")
-        ]
+        PAGES = [line.strip() for line in raw_lines if line.strip() and not line.startswith("#")]
         
-        logger.info(f"After filtering → {len(PAGES)} valid URLs loaded:")
-        for url in PAGES:
-            logger.info(f"  → {url}")
+        logger.info(f"After filtering → {len(PAGES)} valid URLs in PAGES array:")
+        if PAGES:
+            for i, url in enumerate(PAGES, 1):
+                logger.info(f"  [{i}] {url}")
+        else:
+            logger.warning("PAGES IS EMPTY — NO VALID URLS FOUND")
             
     except Exception as e:
-        logger.error(f"Failed to read sources.txt: {e}")
+        logger.error(f"ERROR reading sources.txt: {e}")
         PAGES = []
 else:
-    logger.warning("sources.txt NOT FOUND in repo root! Bot has zero sources → 0 articles forever.")
+    logger.critical("sources.txt DOES NOT EXIST IN REPO ROOT")
     PAGES = []
 
-# Final safety check
+# FINAL ARRAY CHECK + TELEGRAM ALERT
+logger.info(f"FINAL PAGES ARRAY LENGTH: {len(PAGES)}")
 if not PAGES:
-    logger.warning("PAGES list is EMPTY → scan will always return 0 articles")
-
+    logger.critical("PAGES = [] → BOT WILL ALWAYS FIND 0 ARTICLES")
+    # Optional: send alert once at startup
+    # We'll add this in main() below
 def get_latest_file(page_url):
     try:
         r = requests.get(page_url, timeout=20)
