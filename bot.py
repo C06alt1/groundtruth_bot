@@ -207,6 +207,17 @@ def main():
         chat_id=YOUR_CHAT_ID
     )
     logger.info("PureFact bot started")
+    # Send startup warning if no sources
+    if not PAGES:
+        async def send_startup_warning():
+            await application.bot.send_message(
+                chat_id=YOUR_CHAT_ID,
+                text="BOT STARTED BUT sources.txt IS MISSING OR EMPTY!\n\n"
+                     "Create sources.txt in repo root with direct data URLs.\n"
+                     "Until then: 0 articles forever."
+            )
+        application.job_queue.run_once(send_startup_warning, 5)
+    
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
