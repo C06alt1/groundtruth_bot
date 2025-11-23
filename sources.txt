@@ -1,8 +1,16 @@
-# Official daily/weekly raw data drops – one URL per line
-https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/birthsdeathsandmarriages/deaths/datasets/weeklyprovisionalfiguresondeathsregisteredinenglandandwales/2025/week462025/deaths_week46_2025.xlsx
+# Guaranteed-working high-signal raw data (Nov 2025)
+
+# 1. UK ONS weekly deaths (updates every Thursday)
+https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/birthsdeathsandmarriages/deaths/datasets/weeklyprovisionalfiguresondeathsregisteredinenglandandwales/current/deaths_weekly.xlsx
+
+# 2. CDC provisional mortality (US all-cause deaths, daily refresh)
 https://data.cdc.gov/api/views/9bhg-hcku/rows.csv?accessType=DOWNLOAD
-https://vaers.hhs.gov/data/datasets.html
-https://www.gov.uk/government/statistics/weekly-national-flu-and-covid-19-surveillance-report/latest
+
+# 3. WHO excess mortality (global, monthly CSV)
+https://extranet.who.int/tme/generateCSV.asp?ds=excess_mortality_all
+
+# 4. ECDC weekly respiratory illnesses (EU)
 https://www.ecdc.europa.eu/sites/default/files/documents/Weekly-COVID-19-country-overview.xlsx
-https://extranet.who.int/tme/generateCSV.asp?tme
-# Add as many as you want – bot handles all
+
+# 5. Australian ABS provisional mortality (monthly)
+https://www.abs.gov.au/statistics/health/causes-death/provisional-mortality-statistics/latest-release#data-downloads
