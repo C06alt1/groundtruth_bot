@@ -66,24 +66,23 @@ def extract_text(data, name):
 
 # Generate article with DeepSeek
 async def make_article(text, url):
-    if not DEEPSEEK_KEY:
-        return "DEEPSEEK_API_KEY missing"
+    key = os.getenv('GROQ_API_KEY')
+    if not key:
+        return "GROQ_API_KEY missing"
     payload = {
-        "model": "deepseek-chat",
+        "model": "llama-3.1-70b-versatile",
         "messages": [
-            {"role": "system", "content": "You are PureFact Writer. Use ONLY the data. Cite every number with source."},
-            {"role": "user", "content": f"Source: {url}\nData:\n{text[:14000]}"}
+            {"role": "system", "content": "You are PureFact Writer. Use ONLY the data. Cite every number with source. Zero opinion."},
+            {"role": "user", "content": f"Source: {url}\nData chunk:\n{text[:14000]}"}
         ],
         "temperature": 0.1,
         "max_tokens": 1800
     }
     try:
-        r = requests.post(
-            "https://api.deepseek.com/v1/chat/completions",
-            json=payload,
-            headers={"Authorization": f"Bearer {DEEPSEEK_KEY}"},
-            timeout=90
-        )
+        r = requests.post("https://api.groq.com/openai/v1/chat/completions",
+                          json=payload,
+                          headers={"Authorization": f"Bearer {key}"},
+                          timeout=60)
         r.raise_for_status()
         return r.json()["choices"][0]["message"]["content"]
     except Exception as e:
