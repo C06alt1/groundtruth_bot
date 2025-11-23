@@ -9,9 +9,9 @@ from datetime import datetime, timedelta
 import hashlib
 from PyPDF2 import PdfReader
 
-TOKEN = os.getenv('RENDER_BOT_TOKEN')
-DEEPSEEK_KEY = os.getenv('DEEPSEEK_API_KEY')
-SOURCES_URL = "https://raw.githubusercontent.com/YOURNAME/purefact-bot/main/sources.txt"  # ← CHANGE YOURNAME
+TOKEN = os.getenv('RENDER_BOT_TOKEN', '8588832961:AAFF9IELLtd6CEt24uL1nhh3kjEIactAQNs')  # Replace if not using env
+DEEPSEEK_KEY = os.getenv('DEEPSEEK_API_KEY' , 'sk-1935e7fc00a347b5a1a9797c8bff49f2')
+SOURCES_URL = "https://raw.githubusercontent.com/C06alt1/purefact-bot/main/sources.txt"  # ← CHANGE YOURNAME
 
 # Replace YOURNAME above with your actual GitHub username
 
@@ -113,14 +113,23 @@ async def generate_article(raw: str, source_url: str) -> str:
         return f"Generation failed: {e}"
 
 # === RENDER PORT FIX (still included) ===
+# === RENDER PORT FIX – keeps Render happy without affecting the bot ===
 if os.getenv('RENDER'):
-    from waitress import serve
     from flask import Flask
-    app = Flask(__name__)
-    @app.route('/'); def home(): return "Bot alive", 200
+    from waitress import serve
     import threading
-    threading.Thread(target=serve, args=(app,), kwargs={"host": "0.0.0.0", "port": int(os.environ.get("PORT", 8000))}, daemon=True).start()
 
+    flask_app = Flask(__name__)
+
+    @flask_app.route("/")
+    def home():
+        return "PureFact bot alive", 200
+
+    def run_web_server():
+        serve(flask_app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+
+    threading.Thread(target=run_web_server, daemon=True).start()
+# =====================================================================
 def main():
     if not TOKEN: return logger.error("No token")
 
@@ -130,7 +139,7 @@ def main():
 
     # Daily auto-scan at 08:00 UTC (adjust if you want)
     job_queue = app.job_queue
-    job_queue.run_daily(daily_scan, time=datetime.utcnow().replace(hour=8, minute=0, second=0, microsecond=0), chat_id=YOUR_TELEGRAM_CHAT_ID)
+    job_queue.run_daily(daily_scan, time=datetime.utcnow().replace(hour=15, minute=0, second=0, microsecond=0), chat_id=5554592254)
 
     logger.info("PureFact Daily Scanner started")
     app.run_polling()
