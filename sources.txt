@@ -1,0 +1,8 @@
+# Official daily/weekly raw data drops – one URL per line
+https://www.ons.gov.uk/file?uri=/peoplepopulationandcommunity/birthsdeathsandmarriages/deaths/datasets/weeklyprovisionalfiguresondeathsregisteredinenglandandwales/2025/week462025/deaths_week46_2025.xlsx
+https://data.cdc.gov/api/views/9bhg-hcku/rows.csv?accessType=DOWNLOAD
+https://vaers.hhs.gov/data/datasets.html
+https://www.gov.uk/government/statistics/weekly-national-flu-and-covid-19-surveillance-report/latest
+https://www.ecdc.europa.eu/sites/default/files/documents/Weekly-COVID-19-country-overview.xlsx
+https://extranet.who.int/tme/generateCSV.asp?tme
+# Add as many as you want – bot handles all
