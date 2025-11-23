@@ -1,12 +1,14 @@
 import logging
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import requests  # For fetching primary sources
 from datetime import datetime
 import os  # For env vars
 
-# Your bot token (paste it here or set as env var RENDER_BOT_TOKEN)
-TOKEN = os.getenv('RENDER_BOT_TOKEN', '8588832961:AAFF9IELLtd6CEt24uL1nhh3kjEIactAQNs')  # Replace if not using env
+# Your bot token (from Render env var)
+TOKEN = os.getenv('RENDER_BOT_TOKEN')
+
 # The PureFact system prompt (rules we built—edit if you want)
 SYSTEM_PROMPT = """
 You are PureFact News, an AI that reports ONLY verified facts with zero opinion, zero speculation, and zero narrative framing.
@@ -17,18 +19,18 @@ STRICT RULES (never break them):
 - Prefer primary sources: official documents, government data, scientific papers, raw video with visible date/location, court filings, FOIA releases, on-camera statements by involved parties.
 - When sources contradict, list BOTH sides clearly and link both.
 - Quote exact numbers, dates, and wording from the source; never paraphrase in a way that could change meaning.
-- If mainstream outlets and alternative outlets disagree, present both with links and never say which is “correct”.
-- Never use the words “experts say”, “studies show”, “fact-checkers claim” without naming the exact expert/study/checker and linking it.
-- If asked who is “right”, respond: “Here are the primary sources from each side: [links]”
-- Today’s date is November 22, 2025.
-- End every response with a “Sources” section containing all links in full.
+- If mainstream outlets and alternative outlets disagree, present both with links and never say which is "correct".
+- Never use the words "experts say", "studies show", "fact-checkers claim" without naming the exact expert/study/checker and linking it.
+- If asked who is "right", respond: "Here are the primary sources from each side: [links]"
+- Today's date is November 23, 2025.
+- End every response with a "Sources" section containing all links in full.
 
 Format example:
 • 2025-11-15: UK ONS released vaccine mortality data showing X all-cause deaths in vaccinated group vs Y in unvaccinated [link]
-• 2025-11-16: Pfizer spokesperson told Congress “Z” [video link + timestamp]
+• 2025-11-16: Pfizer spokesperson told Congress "Z" [video link + timestamp]
 • 2025-11-17: Independent researcher Dr John Smith posted raw data showing opposite trend [link]
 
-Begin every answer with: “PureFact News – [today’s date] – Topic: [your question]”
+Begin every answer with: "PureFact News – [today's date] – Topic: [your question]"
 """
 
 # List of primary sources (from our 30-feed list—add/remove as needed)
@@ -42,17 +44,22 @@ PRIMARY_SOURCES = [
 ]
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('Welcome to PureFact News! Type /daily for a briefing or ask about any topic.')
 
 async def daily_briefing(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = datetime.now().strftime('%Y-%m-%d')
-    # Simple fetch example (expand with real scraping/API)
-    response = requests.get('https://ourworldindata.org/explorers/coronavirus-data-explorer', timeout=10)
-    # Placeholder—replace with actual logic (e.g., parse JSON from a source)
-    briefing = f"PureFact News Daily Briefing – {today}\n• Sample: Latest global data update [https://ourworldindata.org]\nSources: https://ourworldindata.org"
-    await update.message.reply_text(briefing)
+    try:
+        # Simple fetch example (expand with real scraping/API)
+        response = requests.get('https://ourworldindata.org/explorers/coronavirus-data-explorer', timeout=10)
+        # Placeholder—replace with actual logic (e.g., parse JSON from a source)
+        briefing = f"PureFact News Daily Briefing – {today}\n• Sample: Latest global data update [https://ourworldindata.org]\nSources: https://ourworldindata.org"
+        await update.message.reply_text(briefing)
+    except Exception as e:
+        logger.error(f"Error in daily briefing: {e}")
+        await update.message.reply_text("Briefing unavailable—try again later.")
 
 async def facts_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = ' '.join(context.args) if context.args else update.message.text or 'general facts'
@@ -62,15 +69,31 @@ async def facts_query(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(ai_response)
 
 def main():
-    if TOKEN == 'YOUR_BOT_TOKEN_HERE':
-        logging.error("Set your BOT_TOKEN!")
+    if not TOKEN:
+        logger.error("RENDER_BOT_TOKEN env var not set!")
         return
-    app = Application.builder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("daily", daily_briefing))
-    app.add_handler(CommandHandler("facts", facts_query))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, facts_query))
-    app.run_polling()
+
+    # Build app with v22+ syntax (fixes Updater init on 3.13)
+    application = (
+        Application.builder()
+        .token(TOKEN)
+        .build()
+    )
+
+    # Add handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("daily", daily_briefing))
+    application.add_handler(CommandHandler("facts", facts_query))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, facts_query))
+
+    # Run with explicit async context for stability
+    logger.info("Starting bot...")
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,  # Clears old updates on start
+        timeout=10,
+        bootstrap_retries=-1  # Infinite retries on errors
+    )
 
 if __name__ == '__main__':
     main()
