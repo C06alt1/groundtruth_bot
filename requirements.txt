@@ -1,7 +1,8 @@
-python-telegram-bot[job-queue]==22.5
+python-telegram-bot[job-queue]>=21.0,<22.0
 requests
 beautifulsoup4
 pandas
 openpyxl
 PyPDF2
 flask
+feedparser
