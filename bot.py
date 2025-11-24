@@ -27,6 +27,7 @@ account_id = os.getenv("CF_ACCOUNT_ID")
 api_token = os.getenv("CF_API_TOKEN")
 YOUR_CHAT_ID = 5554592254  # ← CHANGE TO YOUR REAL TELEGRAM ID
 
+
 # -------------------------
 # Start tiny Flask server for Render
 # -------------------------
@@ -228,14 +229,14 @@ def extract_text(data, name):
 
 def generate_text(prompt: str,
                   model: str = "llama-3.3-70b-versatile",
-                  max_tokens: int = 200,
+                  max_tokens: int = 100,
                   temperature: float = 0.9) -> str:
     if not GROQ_KEY:
         return "Error: GROQ API key not set."
     payload = {
         "model": model,
         "messages": [
-            {"role": "system", "content": "You are a helpful AI assistant."},
+            {"role": "system", "content": "You are a Jeremy Clarkson."},
             {"role": "user", "content": prompt}
         ],
         "temperature": temperature,
@@ -259,20 +260,44 @@ def generate_text(prompt: str,
 async def make_article(text: str, url: str):
     if not GROQ_KEY:
         return "Data Update", "GROQ API key missing"
-    title_payload = {
+    article_payload = {
         "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": 
+             "You are Jeremy Clarkson and write in that style"
+             "Write a summary in exactly two paragraphs. Each paragraph must contain about 80 words, with a single clear line break between paragraphs. "},
+            {"role": "user", "content": f"Source: {url}\nData:\n{text[:14000]}"}
+        ],
+        "temperature": 0.3,
+        "max_tokens": 100
+    }
+    try:
+        resp = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            json=article_payload,
+            headers={"Authorization": f"Bearer {GROQ_KEY}"},
+            timeout=60
+        )
+        resp.raise_for_status()
+        article_text = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        logger.error(f"Article generation failed: {e}")
+        article_text = "Summary unavailable."
+
+    title_payload = {
+        "model": "llama-3.1-8b-instant",
         "messages": [
             {"role": "system", "content": 
              "You are a Reuters headline writer.\n"
              "Return ONLY the headline. No quotes, no extra text.\n"
              "Examples:\n"
              "EXCLUSIVE : Actor James Dead dead in car crash age 32\n"
-             "BREAKING : Major earthquake hits city | Thousands displaced | Aid efforts underway\n"
-             "TOP NEWS : Global markets rally | Oil prices surge | Tech stocks lead gains\n"},
-            {"role": "user", "content": f"Source: {url}\nData:\n{text[:5000]}"}
+             "BREAKING : Major earthquake hits city thousands displaced aid efforts underway\n"
+             "TOP NEWS : Global markets rally oil prices surge tech stocks lead gains\n"},
+            {"role": "user", "content": f"Source: {url}\nData:\n{article_text[:5000]}"}
         ],
-        "temperature": 0.15,
-        "max_tokens": 80
+        "temperature": 0.25,
+        "max_tokens":30
     }
     try:
         resp = requests.post(
@@ -289,30 +314,11 @@ async def make_article(text: str, url: str):
     except Exception as e:
         logger.error(f"Title generation failed: {e}")
         title = "Data Update"
-    article_payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [
-            {"role": "system", "content": 
-             "Write a summary in exactly two paragraphs. Each paragraph must contain about 80 words, with a single clear line break between paragraphs. "
-             "Speak in the witty style of Jeremy Clarkson."},
-            {"role": "user", "content": f"Source: {url}\nData:\n{text[:14000]}"}
-        ],
-        "temperature": 0.9,
-        "max_tokens": 350
-    }
-    try:
-        resp = requests.post(
-            "https://api.groq.com/openai/v1/chat/completions",
-            json=article_payload,
-            headers={"Authorization": f"Bearer {GROQ_KEY}"},
-            timeout=60
-        )
-        resp.raise_for_status()
-        article_text = resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        logger.error(f"Article generation failed: {e}")
-        article_text = "Summary unavailable."
+
     return title, article_text
+
+
+
 
 def generate_image_from_title(title: str):
     try:
@@ -350,15 +356,20 @@ async def post_init(application: Application):
 
 async def generate_story(context: ContextTypes.DEFAULT_TYPE):
     application = context.application
-    test_text = generate_text("Tell a random slightly surreal funny story that is related to a news story of the day as if its true",
-                        temperature=0.7)
-    
-    logger.info(test_text)
+    # test_text = generate_text("Tell a random slightly surreal funny story that is related to a news story of the day as if its true",
+    #                     temperature=0.7,
+    #                     max_tokens= 100
+    #                 )
+
+    test_text = "Tell a random slightly surreal funny story that is related to a rrandom recent news story as if its true"
     test_url = "https://groundtruth.com"
+
+
+    logger.info(test_text)
     title, article_text = await make_article(test_text, test_url)
     logger.info(f"Generated test title: {title}")
     logger.info(f"Generated test article: {article_text}")
-    image_bytesio = generate_image_from_title(title.replace("|", " "))
+    image_bytesio = generate_image_from_title(article_text)
     await send_reuters_style(
         bot=application.bot,
         chat_id=YOUR_CHAT_ID,
@@ -408,7 +419,7 @@ def main():
     )
     job_queue = application.job_queue
     job_queue.run_repeating(generate_story, interval=3000)
-    application.add_handler(CommandHandler("scan", manual_scan))
+    application.add_handler(CommandHandler("story", generate_story))
     logger.info("GroundTruth bot started")
     application.run_polling(drop_pending_updates=True)
 
