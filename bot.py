@@ -15,11 +15,43 @@ import random
 import os
 from io import BytesIO
 import logging
+# -------------------------
+# all your imports
+# -------------------------
+from flask import Flask
+# ...rest of imports...
 
-# === CONFIG ===
-TOKEN = os.getenv('RENDER_BOT_TOKEN', '8588832961:AAFF9IELLtd6CEt24uL1nhh3kjEIactAQNs')
+TOKEN = os.getenv('RENDER_BOT_TOKEN')
 GROQ_KEY = os.getenv('GROQ_API_KEY')
+account_id = os.getenv("CF_ACCOUNT_ID")
+api_token = os.getenv("CF_API_TOKEN")
 YOUR_CHAT_ID = 5554592254  # ← CHANGE TO YOUR REAL TELEGRAM ID
+
+# -------------------------
+# Start tiny Flask server for Render
+# -------------------------
+app = Flask(__name__)
+
+@app.route("/")
+def index():
+    return "OK"
+
+def run_flask():
+    app.run(host="0.0.0.0", port=10000)
+
+threading.Thread(target=run_flask, daemon=True).start()
+
+# -------------------------
+# Your Telegram bot setup
+# -------------------------
+async def start(update, context):
+    await update.message.reply_text("Bot is alive!")
+
+def main():
+    application = Application.builder().token(TOKEN).build()
+    application.run_polling()   # Start Telegram bot (long-poll)
+# === CONFIG ===
+
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -284,8 +316,6 @@ async def make_article(text: str, url: str):
 
 def generate_image_from_title(title: str):
     try:
-        account_id = os.getenv("CF_ACCOUNT_ID","f5057d0d7c5d703abff6a8ce24a499dd")
-        api_token = os.getenv("CF_API_TOKEN","x8OoUEnhDvA-0_FLfcWbsXdgaRrXPBKE0BcV8Zmy")
         if not account_id or not api_token:
             raise ValueError("CF_ACCOUNT_ID or CF_API_TOKEN is missing")
 
@@ -297,10 +327,6 @@ def generate_image_from_title(title: str):
         }
         payload = {
             "prompt": title,
-            "size": "1280x720",
-            "steps": 25,
-            "cfg_scale": 7.0,
-            "samples": 1
         }
         logger.info(f"[DEBUG] Sending prompt to Workers AI: {title}")
         resp = requests.post(f"{API_BASE_URL}{model}", headers=headers, json=payload, timeout=60)
@@ -324,7 +350,7 @@ async def post_init(application: Application):
 
 async def generate_story(context: ContextTypes.DEFAULT_TYPE):
     application = context.application
-    test_text = generate_text("Tell a random slightly surreal story that is related to a news story of the day as if its true",
+    test_text = generate_text("Tell a random slightly surreal funny story that is related to a news story of the day as if its true",
                         temperature=0.7)
     
     logger.info(test_text)
@@ -381,7 +407,7 @@ def main():
         .build()
     )
     job_queue = application.job_queue
-    job_queue.run_repeating(generate_story, interval=3600)
+    job_queue.run_repeating(generate_story, interval=3000)
     application.add_handler(CommandHandler("scan", manual_scan))
     logger.info("GroundTruth bot started")
     application.run_polling(drop_pending_updates=True)
