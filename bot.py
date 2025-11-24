@@ -27,7 +27,6 @@ account_id = os.getenv("CF_ACCOUNT_ID")
 api_token = os.getenv("CF_API_TOKEN")
 YOUR_CHAT_ID = 5554592254  # ← CHANGE TO YOUR REAL TELEGRAM ID
 
-
 # -------------------------
 # Start tiny Flask server for Render
 # -------------------------
